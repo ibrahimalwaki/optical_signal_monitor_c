@@ -9,9 +9,10 @@ add_compile_options(-Wall -Wextra -Werror -O2 -g)
 add_executable(optical_monitor
     src/main.c
     src/acquisition.c
+    src/processing.c
 )
 
 find_package(Threads REQUIRED)
-target_link_libraries(optical_monitor PRIVATE Threads::Threads)
+target_link_libraries(optical_monitor PRIVATE Threads::Threads m)
 
 target_include_directories(optical_monitor PRIVATE include)

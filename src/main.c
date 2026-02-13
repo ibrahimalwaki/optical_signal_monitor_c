@@ -1,36 +1,38 @@
 #include <stdio.h>
-#include <stddef.h>
-
 #include "acquisition.h"
+#include "processing.h"
 
 #define N 256
 
-static void print_block_stats(const float *x, size_t n) {
-    float minv = x[0], maxv = x[0], sum = 0.0f;
-    for (size_t i = 0; i < n; i++) {
-        if (x[i] < minv) minv = x[i];
-        if (x[i] > maxv) maxv = x[i];
-        sum += x[i];
-    }
-    float avg = sum / (float)n;
-    printf("block stats: min=%.4f max=%.4f avg=%.4f\n", minv, maxv, avg);
-}
-
-int main(void) {
+int main(void)
+{
     static float block[N];
+    static float filtered[N];
 
     SignalConfig cfg = {
         .freq_hz = 1000.0f,
         .sample_rate_hz = 48000.0f,
         .amplitude = 1.0f,
-        .noise_std = 0.05f
+        .noise_std = 0.1f
     };
 
     float phase = 0.0f;
 
+    LowPassFilter lp;
+    lp_init(&lp, 0.15f);
+
     for (int i = 0; i < 5; i++) {
+
         acquisition_generate_block(block, N, &cfg, &phase);
-        print_block_stats(block, N);
+
+        Metrics raw = compute_metrics(block, N);
+
+        lp_apply(&lp, block, filtered, N);
+        Metrics fil = compute_metrics(filtered, N);
+
+        printf("raw: rms=%.4f peak=%.4f | filtered: rms=%.4f peak=%.4f\n",
+               raw.rms, raw.peak,
+               fil.rms, fil.peak);
     }
 
     return 0;
