@@ -1,8 +1,19 @@
 #include <stdio.h>
+#include <time.h>
+
 #include "acquisition.h"
 #include "processing.h"
 
 #define N 256
+#define PERIOD_MS 1000
+
+static void sleep_ms(long ms)
+{
+    struct timespec req;
+    req.tv_sec = ms / 1000;
+    req.tv_nsec = (ms % 1000) * 1000000L;
+    nanosleep(&req, NULL);
+}
 
 int main(void)
 {
@@ -21,8 +32,10 @@ int main(void)
     LowPassFilter lp;
     lp_init(&lp, 0.15f);
 
-    for (int i = 0; i < 5; i++) {
+    printf("Starting periodic loop...\n");
 
+    while (1)
+    {
         acquisition_generate_block(block, N, &cfg, &phase);
 
         Metrics raw = compute_metrics(block, N);
@@ -33,6 +46,8 @@ int main(void)
         printf("raw: rms=%.4f peak=%.4f | filtered: rms=%.4f peak=%.4f\n",
                raw.rms, raw.peak,
                fil.rms, fil.peak);
+
+        sleep_ms(PERIOD_MS);
     }
 
     return 0;
