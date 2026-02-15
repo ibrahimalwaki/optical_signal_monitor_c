@@ -5,10 +5,11 @@
 #include "acquisition.h"
 #include "processing.h"
 #include "queue.h"
+#include "fault.h"
 
 #define N 256
 #define QUEUE_CAPACITY 8
-#define PERIOD_MS 1000  // producer generates every 1 s
+#define PERIOD_MS 50  // producer generates every 1 s
 
 static void sleep_ms(long ms)
 {
@@ -28,6 +29,7 @@ typedef struct {
 typedef struct {
     BlockQueue *q;
     LowPassFilter lp;
+    FaultDetector fd;
     int running;
 } ConsumerCtx;
 
@@ -61,6 +63,11 @@ static void *consumer_thread(void *arg)
         printf("raw: rms=%.4f peak=%.4f | filtered: rms=%.4f peak=%.4f\n",
                raw.rms, raw.peak, fil.rms, fil.peak);
         fflush(stdout);
+        FaultType f = fault_update(&ctx->fd, raw);
+        if (f != FAULT_NONE) {
+            printf("ALERT: %s (raw rms=%.4f peak=%.4f)\n", fault_name(f), raw.rms, raw.peak);
+        }
+
     }
     return NULL;
 }
@@ -92,7 +99,11 @@ int main(void)
         .q = &q,
         .running = 1
     };
-    lp_init(&cons.lp, 0.15f);
+    lp_init(&cons.lp, 0.15f); // smoothing factor for low-pass filter
+    fault_init(&cons.fd, 
+        0.20f,     //dropout rms threshold
+        1.40f,     //spike peak threshold
+        10);       //cooldown blocks
 
     pthread_t pt, ct;
     pthread_create(&pt, NULL, producer_thread, &prod);
