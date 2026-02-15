@@ -1,15 +1,17 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <time.h>
+#include <sys/time.h>
 
 #include "acquisition.h"
 #include "processing.h"
 #include "queue.h"
 #include "fault.h"
+#include "logger.h"
 
 #define N 256
 #define QUEUE_CAPACITY 8
-#define PERIOD_MS 50  // producer generates every 1 s
+#define PERIOD_MS 50  // producer generates every 50 ms
 
 static void sleep_ms(long ms)
 {
@@ -17,6 +19,13 @@ static void sleep_ms(long ms)
     req.tv_sec = ms / 1000;
     req.tv_nsec = (ms % 1000) * 1000000L;
     nanosleep(&req, NULL);
+}
+
+static long long now_ms(void)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (long long)tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL);
 }
 
 typedef struct {
@@ -30,6 +39,7 @@ typedef struct {
     BlockQueue *q;
     LowPassFilter lp;
     FaultDetector fd;
+    Logger lg;
     int running;
 } ConsumerCtx;
 
@@ -60,14 +70,23 @@ static void *consumer_thread(void *arg)
         lp_apply(&ctx->lp, block, filtered, N);
         Metrics fil = compute_metrics(filtered, N);
 
+        FaultType f = fault_update(&ctx->fd, raw);
+        const char *fname = (f == FAULT_NONE) ? "NONE" : fault_name(f);
+
+        if (f != FAULT_NONE) {
+            printf("ALERT: %s (raw rms=%.4f peak=%.4f)\n",
+                   fname, raw.rms, raw.peak);
+        }
+
         printf("raw: rms=%.4f peak=%.4f | filtered: rms=%.4f peak=%.4f\n",
                raw.rms, raw.peak, fil.rms, fil.peak);
         fflush(stdout);
-        FaultType f = fault_update(&ctx->fd, raw);
-        if (f != FAULT_NONE) {
-            printf("ALERT: %s (raw rms=%.4f peak=%.4f)\n", fault_name(f), raw.rms, raw.peak);
-        }
 
+        // Log to CSV
+        logger_write(&ctx->lg, now_ms(),
+                     raw.rms, raw.peak,
+                     fil.rms, fil.peak,
+                     fname);
     }
     return NULL;
 }
@@ -99,11 +118,16 @@ int main(void)
         .q = &q,
         .running = 1
     };
-    lp_init(&cons.lp, 0.15f); // smoothing factor for low-pass filter
-    fault_init(&cons.fd, 
-        0.20f,     //dropout rms threshold
-        1.40f,     //spike peak threshold
-        10);       //cooldown blocks
+
+    lp_init(&cons.lp, 0.15f);
+    fault_init(&cons.fd, 0.20f, 1.40f, 10);
+
+    // Open CSV logger
+    if (logger_open(&cons.lg, "logs/run.csv") != 0) {
+        printf("logger_open failed (make sure logs/ exists)\n");
+        queue_destroy(&q);
+        return 1;
+    }
 
     pthread_t pt, ct;
     pthread_create(&pt, NULL, producer_thread, &prod);
@@ -113,5 +137,6 @@ int main(void)
 
     while (1) {
         sleep_ms(1000);
-    }  
+    }
+
 }

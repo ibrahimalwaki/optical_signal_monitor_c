@@ -12,6 +12,7 @@ add_executable(optical_monitor
     src/processing.c
     src/queue.c
     src/fault.c
+    src/logger.c
 )
 
 find_package(Threads REQUIRED)
