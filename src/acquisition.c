@@ -36,23 +36,44 @@ void acquisition_generate_block(float *out, size_t n,
 {
     if (!out || !cfg || !phase_rad || n == 0) return;
 
-    const float two_pi = 6.2831853071795864769f;
+    const float two_pi = 2.0f * M_PI;
     const float phase_step = two_pi * (cfg->freq_hz / cfg->sample_rate_hz);
 
     // Seed from current phase (deterministic-ish across runs)
     uint32_t rng = (uint32_t)((*phase_rad) * 100000.0f) ^ 0xA5A5A5A5u;
 
+    // Decide faults once per block
+    int do_dropout = 0;
+    int do_spike = 0;
+
+    if (cfg->dropout_rate > 0.0f) {
+        float u = (float)(xorshift32(&rng) >> 8) / (float)(0x00FFFFFFu);
+        if (u < cfg->dropout_rate) do_dropout = 1;
+    }
+
+    if (!do_dropout && cfg->spike_rate > 0.0f) {
+        float u = (float)(xorshift32(&rng) >> 8) / (float)(0x00FFFFFFu);
+        if (u < cfg->spike_rate) do_spike = 1;
+    }
+
+
     float phase = *phase_rad;
 
     for (size_t i = 0; i < n; i++) {
-        float clean = cfg->amplitude * sinf(phase);
+        float clean = do_dropout ? 0.0f : (cfg->amplitude * sinf(phase));
+
+        float noise_std = cfg->noise_std;
+        if (do_spike && cfg->spike_noise_std > noise_std) {
+            noise_std = cfg->spike_noise_std;
+        }
 
         float noise = 0.0f;
-        if (cfg->noise_std > 0.0f) {
-            noise = cfg->noise_std * approx_gaussian(&rng);
+        if (noise_std > 0.0f) {
+            noise = noise_std * approx_gaussian(&rng);
         }
 
         out[i] = clean + noise;
+
 
         phase += phase_step;
         if (phase >= two_pi) phase -= two_pi; // keep bounded

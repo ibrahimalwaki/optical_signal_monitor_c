@@ -8,6 +8,10 @@ typedef struct {
     float sample_rate_hz;
     float amplitude;
     float noise_std;   // standard deviation of gaussian-ish noise (approx)
+    // Fault injection (Step 6)
+    float dropout_rate;     // 0..1 chance per block (e.g., 0.02 = 2%)
+    float spike_rate;       // 0..1 chance per block
+    float spike_noise_std;  // noise std during spike (e.g., 0.6)
 } SignalConfig;
 
 // Generates n samples into out[]. Keeps phase continuous across calls via *phase_rad.

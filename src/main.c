@@ -79,7 +79,10 @@ int main(void)
             .freq_hz = 1000.0f,
             .sample_rate_hz = 48000.0f,
             .amplitude = 1.0f,
-            .noise_std = 0.10f
+            .noise_std = 0.10f,
+            .dropout_rate = 0.02f,
+            .spike_rate = 0.02f,
+            .spike_noise_std = 0.60f,
         },
         .phase = 0.0f,
         .running = 1
