@@ -2,6 +2,8 @@
 #include <pthread.h>
 #include <time.h>
 #include <sys/time.h>
+#include <signal.h>
+#include <stdatomic.h>
 
 #include "acquisition.h"
 #include "processing.h"
@@ -12,6 +14,14 @@
 #define N 256
 #define QUEUE_CAPACITY 8
 #define PERIOD_MS 50  // producer generates every 50 ms
+
+static atomic_int g_stop = 0;
+
+static void on_sigint(int sig)
+{
+    (void)sig;
+    g_stop = 1;
+}
 
 static void sleep_ms(long ms)
 {
@@ -48,7 +58,7 @@ static void *producer_thread(void *arg)
     ProducerCtx *ctx = (ProducerCtx *)arg;
     float block[N];
 
-    while (ctx->running) {
+    while (!g_stop) {
         acquisition_generate_block(block, N, &ctx->cfg, &ctx->phase);
         queue_push(ctx->q, block);
         sleep_ms(PERIOD_MS);
@@ -62,8 +72,9 @@ static void *consumer_thread(void *arg)
     float block[N];
     float filtered[N];
 
-    while (ctx->running) {
+    while (!g_stop) {
         queue_pop(ctx->q, block);
+        if(g_stop) break;  // check for shutdown after waking up
 
         Metrics raw = compute_metrics(block, N);
 
@@ -132,11 +143,26 @@ int main(void)
     pthread_t pt, ct;
     pthread_create(&pt, NULL, producer_thread, &prod);
     pthread_create(&ct, NULL, consumer_thread, &cons);
+    signal(SIGINT, on_sigint);
 
     printf("Running (2-thread pipeline). Press Ctrl+C to stop.\n");
 
-    while (1) {
-        sleep_ms(1000);
+    while (!g_stop) {
+        sleep_ms(200);
     }
+    // Wake consumer if blocked in queue_pop
+    float poison[N] = {0};
+    queue_push(&q, poison);
+
+    // wait for threads to exit
+    pthread_join(pt, NULL);
+    pthread_join(ct, NULL);
+
+    // cleanup
+    logger_close(&cons.lg);
+    queue_destroy(&q);
+
+    printf("Shutdown complete.\n");
+    return 0;
 
 }
