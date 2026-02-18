@@ -15,7 +15,17 @@ add_executable(optical_monitor
     src/logger.c
 )
 
+add_executable(optical_tests
+    tests/test_main.c
+    src/processing.c
+    src/fault.c
+    src/queue.c
+)
+
 find_package(Threads REQUIRED)
 target_link_libraries(optical_monitor PRIVATE Threads::Threads m)
 
+target_link_libraries(optical_tests PRIVATE Threads::Threads m)
+
 target_include_directories(optical_monitor PRIVATE include)
+target_include_directories(optical_tests PRIVATE include)

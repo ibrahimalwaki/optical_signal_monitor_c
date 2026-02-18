@@ -11,7 +11,7 @@ void lp_init(LowPassFilter *f, float alpha) {
     f->prev_y = 0.0f;
 }
 
-// y[n] = alpha*x[n] + (1-alpha)*y[n-1]
+// y[n] = alpha*x[n] + (1-alpha)*y[n-1] This is a first-order IIR filter.
 void lp_apply(LowPassFilter *f, const float *in, float *out, size_t n) {
     if (!f || !in || !out || n == 0) return;
 
